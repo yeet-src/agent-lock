@@ -29,15 +29,21 @@ export const clipPath = (path, n) => {
   return "…" + path.slice(-(n - 1));
 };
 
-// Unicode sparkline from a series of values, scaled to its own max.
+// Unicode sparkline from a series of values.
 const BARS = "▁▂▃▄▅▆▇█";
-export const sparkline = (series) => {
-  const max = series.reduce((m, v) => (v > m ? v : m), 0);
-  if (max <= 0) return BARS[0].repeat(series.length);
+// `ceiling` fixes the top of the scale so a quiet stretch and a busy one look
+// DIFFERENT — self-scaling (the old default) made every window look identically
+// full. Pass the rolling max the caller tracks; falls back to the series max
+// only when no ceiling is given (back-compat).
+export const sparkline = (series, ceiling) => {
+  const top = ceiling && ceiling > 0
+    ? ceiling
+    : series.reduce((m, v) => (v > m ? v : m), 0);
+  if (top <= 0) return BARS[0].repeat(series.length);
   let out = "";
   for (const v of series) {
-    const f = v / max;
-    out += BARS[Math.min(BARS.length - 1, Math.max(0, Math.floor(f * BARS.length)))];
+    const f = Math.min(1, v / top);
+    out += BARS[Math.min(BARS.length - 1, Math.max(0, Math.round(f * (BARS.length - 1))))];
   }
   return out;
 };
@@ -54,4 +60,42 @@ export const splitBar = (allowed, system, blocked, reached, width) => {
   const l = Math.round((reached / total) * width);
   const b = Math.max(0, width - a - s - l);
   return { a, s, b, l, rest: 0 };
+};
+
+// Fractional-fill variant: a security proportion bar must never round a
+// nonzero enforcement category (blocked/reached) down to ZERO cells — that
+// would hide the one thing this tool exists to show. Any nonzero share gets at
+// least a 1/8 sliver via the eighth-block glyphs. Returns styled runs the
+// caller colours, ordered in-bounds | system | blocked | reached | track.
+// `col` maps a segment key -> a color fn; `trackCol` colours the empty tail.
+const HBAR = "▏▎▍▌▋▊▉█"; // 1/8 .. 8/8
+const eighths = (frac, width) => {
+  // Number of eighth-cells (0..width*8), min 1 for any nonzero share so a
+  // lone blocked attempt still shows.
+  const raw = frac * width * 8;
+  return frac > 0 ? Math.max(1, Math.round(raw)) : 0;
+};
+export const splitBarFrac = (allowed, system, blocked, reached, width, col, trackCol) => {
+  const total = allowed + system + blocked + reached;
+  if (total === 0) return [trackCol("░".repeat(width))];
+  const segs = [
+    ["a", allowed], ["s", system], ["b", blocked], ["l", reached],
+  ];
+  let usedCells = 0;
+  const runs = [];
+  for (const [key, val] of segs) {
+    let e = eighths(val / total, width);
+    if (e === 0) continue;
+    // Don't overrun the bar; leave room only if later nonzero segments exist.
+    const remainingCells = width - usedCells;
+    if (remainingCells <= 0) break;
+    const full = Math.floor(e / 8);
+    const rem = e % 8;
+    let cells = Math.min(full, remainingCells);
+    let str = "█".repeat(cells);
+    if (rem > 0 && cells < remainingCells) { str += HBAR[rem - 1]; cells += 1; }
+    if (str) { runs.push(col(key)(str)); usedCells += cells; }
+  }
+  if (usedCells < width) runs.push(trackCol("░".repeat(width - usedCells)));
+  return runs;
 };

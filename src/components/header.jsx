@@ -4,7 +4,12 @@
 //   3. the proportion bar + per-category tallies + access-rate sparkline
 // All tinted as rails via the container bg for reliable full-width fills.
 import { Box, Text, bold, fg, bg, idx, C, sep } from "@/lib/theme.js";
-import { fmtCount, fmtRate, sparkline, splitBar } from "@/lib/format.js";
+import { fmtCount, fmtRate, sparkline, splitBarFrac } from "@/lib/format.js";
+
+// Colour map for the fractional proportion bar (keys from splitBarFrac).
+const barCol = (k) =>
+  k === "a" ? fg(C.safe) : k === "s" ? fg(C.system)
+  : k === "b" ? fg(C.block) : fg(C.leak);
 
 const BAR_W = 30;
 
@@ -68,22 +73,26 @@ export default ({ stats, mode, dir }) => (
       <Text break="none">
         {() => {
           const s = stats.get();
-          const split = splitBar(s.allowed, s.system || 0, s.blocked, s.reached, BAR_W);
-          const bar = [
-            fg(C.safe)("█".repeat(split.a)),
-            fg(C.system)("█".repeat(split.s)),
-            fg(C.block)("█".repeat(split.b)),
-            fg(C.leak)("█".repeat(split.l)),
-            fg(C.frame)("░".repeat(split.rest)),
-          ];
+          // Fractional fill: a lone blocked/reached attempt still shows a sliver
+          // instead of rounding away — the whole point of a security bar.
+          const bar = splitBarFrac(
+            s.allowed, s.system || 0, s.blocked, s.reached, BAR_W,
+            barCol, fg(C.frame),
+          );
+          const win = s.spark.slice(-20);
           const rate = s.spark.length ? s.spark[s.spark.length - 1] : 0;
+          // Scale the 20-bucket (~8s) display against the FULL 80-bucket (~32s)
+          // history peak, not the window's own max. Now a lull reads as low bars
+          // and a burst spikes — self-scaling per-window made every stretch look
+          // equally full, hiding exactly the rise this line is meant to show.
+          const ceil = s.spark.reduce((m, v) => (v > m ? v : m), 0);
           return [
             " ", ...bar, "  ",
             bold(fg(C.safe)(fmtCount(s.allowed))), fg(C.textDim)(" in-bounds"), sep,
             bold(fg(C.block)(fmtCount(s.blocked))), fg(C.textDim)(" blocked"),
             s.reached > 0 ? [sep, bold(fg(C.leak)(fmtCount(s.reached))), fg(C.leak)(" reached")] : "",
             sep, fg(C.system)(`${fmtCount(s.system || 0)} system`),
-            sep, fg(C.safeDim)(sparkline(s.spark.slice(-20))), fg(C.textDim)(` ${fmtRate(rate)}/s`),
+            sep, fg(C.safeDim)(sparkline(win, ceil)), fg(C.textDim)(` ${fmtRate(rate)}/s`),
           ];
         }}
       </Text>
