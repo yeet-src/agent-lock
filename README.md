@@ -131,7 +131,7 @@ The build uses the pinned static toolchain (clang, bpftool, esbuild) resolved by
 
 ## License
 
-The BPF program declares `SEC("license") = "GPL"`, required because BPF LSM programs use GPL-only kernel helpers. The repository does not yet ship a top-level LICENSE file.
+GPL-2.0.
 
 ---
 
