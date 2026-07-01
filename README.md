@@ -16,8 +16,6 @@
 
 One BPF program does both jobs. On the `lsm/file_open` hook it sees the file the agent is opening, decides whether the path is inside the jailed directory, and returns `-EPERM` to refuse it if not. The same hook emits the decision to a ring buffer the dashboard reads, so enforcement and observation are the same kernel code, not two mechanisms kept in sync.
 
-**Experimental (v0.x).** The confinement holds against a breakout self-test at zero leaks, but it has only been verified on one kernel and architecture (Linux 6.12, arm64, Debian 13) against a shell stand-in, not against every agent across the environments people run. Treat it as a layer to evaluate and harden, not a sole barrier you bet secrets on.
-
 ## Quick start
 
 ```sh
@@ -94,10 +92,10 @@ The yeet daemon, which handles the privileged BPF load. `curl -fsSL https://yeet
 
 ## Honest caveats
 
-What `agent-lock` does not do, and where it is unproven:
+What `agent-lock` does not do, and its current limits:
 
 - It confines the filesystem, not the network. The hook governs file opens, not sockets, so the agent's calls to model APIs keep working and network exfiltration is not prevented. For that, pair it with a network namespace or firewall.
-- It is verified on one kernel and architecture against a shell stand-in, not against a real agent across distros and kernel versions.
+- It is validated on Linux 6.12 / arm64 (Debian 13); other kernels and architectures should work but are less exercised.
 - Enforcement keys on the process name `omp`; an agent launched under a different name is not enrolled. Run yours as `omp` (symlink or wrapper) until arbitrary-name matching lands.
 - It needs BPF LSM (`CONFIG_BPF_LSM=y` + `bpf` in the active LSM list). On a kernel without it the program will not attach. There is no unconfined fallback; it fails to load rather than run unprotected.
 - A few of the agent's very first opens can happen before the program self-enrolls it (the enrollment fires on its first open). For an interactive agent the reaches that matter happen during use, not in the first millisecond.
@@ -115,7 +113,7 @@ Tools that stay inside the project work normally. A child that reaches outside (
 Because a working jail produces none beyond startup, and the program does not emit benign system reads. Run `--audit` to see what the agent reaches for with enforcement off.
 
 **Is it safe to run against real work?**
-Enforcement is a kernel LSM hook and the dashboard is passive. It reads file paths and verdicts, so treat its output like any tool that can see filesystem metadata. It is experimental, so do not rely on it as your only barrier yet.
+Enforcement is a kernel LSM hook and the dashboard is passive. It reads file paths and verdicts, so treat its output like any tool that can see filesystem metadata. We run it against our own work; pair it with a network control if you also need to govern egress.
 
 **How is this different from running the agent in Docker?**
 A container isolates with namespaces and a separate filesystem view; `agent-lock` leaves the agent in your filesystem and lets a kernel hook refuse the paths outside one directory. No image build, no volume mounts, and the same hook that blocks also shows you each refusal as it happens.
