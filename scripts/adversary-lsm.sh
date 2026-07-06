@@ -10,13 +10,19 @@ set -u
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$HERE"
 
-PROJ=/tmp/agent-lock-adv
+# Jail under $HOME, NOT /tmp. /tmp/ is a blanket system-read prefix in the
+# kernel program (sys_prefixes[]), so a sibling under /tmp is allowed as a
+# benign scratch read regardless of the jail boundary — which would make the
+# prefix-sibling test below leak for a reason that has nothing to do with the
+# boundary check it exists to exercise. A home-dir path is both realistic (real
+# jailed projects live there) and outside every system/scratch allowlist.
+PROJ="$HOME/.agent-lock-adv"
 rm -rf "$PROJ"; mkdir -p "$PROJ"
 cp scripts/adversary.sh "$PROJ/adversary.sh"   # must live INSIDE the jail to be read
 # Prefix-sibling directory: a same-prefix directory next to the jail that
 # a naive path-prefix check would allow. The under_prefix() boundary check
-# must refuse this — otherwise "/tmp/agent-lock-adv2" is reachable from
-# "/tmp/agent-lock-adv". This is the escape vector this fix closes.
+# must refuse this — otherwise "$HOME/.agent-lock-adv2" is reachable from
+# "$HOME/.agent-lock-adv". This is the escape vector this fix closes.
 SIBLING="${PROJ}2"
 rm -rf "$SIBLING"; mkdir -p "$SIBLING"
 echo "SIBLING_SECRET" > "$SIBLING/secret.txt"
