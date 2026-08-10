@@ -1,3 +1,5 @@
+<!-- yeet:user-friendly-title: Enforce agentic policies -->
+
 # `agent-lock`
 
 > **A cell for your AI agent.** The kernel decides what it can touch, and you watch it try.
